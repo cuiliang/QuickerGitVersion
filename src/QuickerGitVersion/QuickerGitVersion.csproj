@@ -5,12 +5,28 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>false</SelfContained>
+    <!-- 注释掉 PublishSingleFile，因为它与 Global Tool 不兼容 -->
+    <!-- <PublishSingleFile>true</PublishSingleFile> -->
+    <!-- <SelfContained>false</SelfContained> -->
     <AssemblyTitle>QuickerGitVersion</AssemblyTitle>
     <AssemblyDescription>A simple GitVersion command line tool implementation</AssemblyDescription>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>
+    
+    <!-- Global Tool Configuration -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>quickergitversion</ToolCommandName>
+    <PackageId>QuickerGitVersion</PackageId>
+    <PackageVersion>1.0.0</PackageVersion>
+    <Authors>cuiliang</Authors>
+    <Company>cuiliang</Company>
+    <Description>A fast and lightweight GitVersion alternative for .NET projects</Description>
+    <PackageTags>git;version;semantic;versioning;gitversion;tool</PackageTags>
+    <PackageProjectUrl>https://github.com/cuiliang/QuickerGitVersion</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/cuiliang/QuickerGitVersion</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,4 +37,9 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
+
 </Project> 
+

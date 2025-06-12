@@ -14,10 +14,6 @@
     <SourceRoot Include="C:\Program Files (x86)\Microsoft Visual Studio\Shared\NuGetPackages\" />
   </ItemGroup>
   <ImportGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
-    <Import Project="$(NuGetPackageRoot)\microsoft.net.illink.tasks\8.0.17\build\Microsoft.NET.ILLink.Tasks.props" Condition="Exists('$(NuGetPackageRoot)\microsoft.net.illink.tasks\8.0.17\build\Microsoft.NET.ILLink.Tasks.props')" />
     <Import Project="$(NuGetPackageRoot)\libgit2sharp.nativebinaries\2.0.322\build\LibGit2Sharp.NativeBinaries.props" Condition="Exists('$(NuGetPackageRoot)\libgit2sharp.nativebinaries\2.0.322\build\LibGit2Sharp.NativeBinaries.props')" />
   </ImportGroup>
-  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
-    <PkgMicrosoft_NET_ILLink_Tasks Condition=" '$(PkgMicrosoft_NET_ILLink_Tasks)' == '' ">F:\_nuget\microsoft.net.illink.tasks\8.0.17</PkgMicrosoft_NET_ILLink_Tasks>
-  </PropertyGroup>
 </Project>

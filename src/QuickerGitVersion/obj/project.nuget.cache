@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "EWTykKgBhrk=",
+  "dgSpecHash": "hjYFE2e9PG4=",
   "success": true,
   "projectFilePath": "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj",
   "expectedPackageFiles": [
@@ -18,7 +18,6 @@
     "F:\\_nuget\\microsoft.extensions.options\\8.0.0\\microsoft.extensions.options.8.0.0.nupkg.sha512",
     "F:\\_nuget\\microsoft.extensions.options.configurationextensions\\8.0.0\\microsoft.extensions.options.configurationextensions.8.0.0.nupkg.sha512",
     "F:\\_nuget\\microsoft.extensions.primitives\\8.0.0\\microsoft.extensions.primitives.8.0.0.nupkg.sha512",
-    "F:\\_nuget\\microsoft.net.illink.tasks\\8.0.17\\microsoft.net.illink.tasks.8.0.17.nupkg.sha512",
     "F:\\_nuget\\system.commandline\\2.0.0-beta4.22272.1\\system.commandline.2.0.0-beta4.22272.1.nupkg.sha512",
     "F:\\_nuget\\system.text.json\\8.0.5\\system.text.json.8.0.5.nupkg.sha512"
   ],
