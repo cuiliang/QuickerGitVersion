@@ -11,13 +11,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# 运行 quickergitversion 更新版本信息
+Write-Host "🚀 Running QuickerGitVersion to update version info..." -ForegroundColor Cyan
+quickergitversion
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "QuickerGitVersion failed to run. Please make sure it is installed and in your PATH."
+    exit 1
+}
+
 # 从 gitversion.props 读取版本信息
 Write-Host "📝 Reading version from gitversion.props..." -ForegroundColor Cyan
 $GitVersionPropsFile = "gitversion.props"
-if (-not (Test-Path $GitVersionPropsFile)) {
-    Write-Error "$GitVersionPropsFile not found. Please run QuickerGitVersion tool first to generate it."
-    exit 1
-}
 [xml]$gitversionProps = Get-Content $GitVersionPropsFile
 $Version = $gitversionProps.Project.PropertyGroup.GitVersion_FullSemVer
 if (-not $Version) {

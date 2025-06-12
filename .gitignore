@@ -347,5 +347,4 @@ output/
 .cursor/
 .cursorrules
 .vscode/
-.idea/ 
-obj/
+.idea/
