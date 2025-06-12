@@ -19,7 +19,7 @@ public class FileGeneratorService
             var filePath = Path.Combine(outputPath, "gitversion.json");
             
             // 检查文件是否被锁定
-            await CheckFileAccessAsync(filePath);
+            CheckFileAccess(filePath);
             
             var jsonOptions = new JsonSerializerOptions
             {
@@ -54,7 +54,7 @@ public class FileGeneratorService
             }
             
             var filePath = Path.Combine(outputPath, "gitversion.props");
-            await CheckFileAccessAsync(filePath);
+            CheckFileAccess(filePath);
             
             var sb = new StringBuilder();
             sb.AppendLine("<Project>");
@@ -93,7 +93,7 @@ public class FileGeneratorService
             }
             
             var filePath = Path.Combine(outputPath, "gitversion.properties");
-            await CheckFileAccessAsync(filePath);
+            CheckFileAccess(filePath);
             
             var sb = new StringBuilder();
             sb.AppendLine("# GitVersion Properties");
@@ -121,7 +121,7 @@ public class FileGeneratorService
         }
     }
     
-    private async Task CheckFileAccessAsync(string filePath)
+    private void CheckFileAccess(string filePath)
     {
         if (File.Exists(filePath))
         {
@@ -129,6 +129,7 @@ public class FileGeneratorService
             {
                 // 尝试打开文件检查是否被锁定
                 using var stream = File.Open(filePath, FileMode.Open, FileAccess.Write, FileShare.None);
+                stream.Close(); // 显式关闭
             }
             catch (IOException)
             {

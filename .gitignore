@@ -348,3 +348,4 @@ output/
 .cursorrules
 .vscode/
 .idea/ 
+obj/

@@ -15,4 +15,6 @@ public class GitInfo
     public int CommitsSinceVersionSource { get; set; }
     
     public string VersionSourceSha { get; set; } = string.Empty;
+    
+    public string? LatestTag { get; set; }
 } 

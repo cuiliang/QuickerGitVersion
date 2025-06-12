@@ -55,13 +55,22 @@ public class GitService
             var commitDate = currentCommit.Author.When.ToString("yyyy-MM-dd");
             
             // 查找版本标签
-            var tags = repo.Tags
-                .Where(t => IsVersionTag(t.FriendlyName))
-                .OrderByDescending(t => GetCommitDate(t.Target))
+            var versionTags = repo.Tags
+                .Select(t =>
+                {
+                    var friendlyName = t.FriendlyName;
+                    var success = System.Version.TryParse(friendlyName.TrimStart('v'), out var version);
+                    return new { Tag = t, Version = version, Success = success, IsVersion = IsVersionTag(friendlyName) };
+                })
+                .Where(x => x.Success && x.IsVersion)
+                .OrderByDescending(x => x.Version)
+                .Select(x => x.Tag)
                 .ToList();
+
+            var latestVersionTag = versionTags.FirstOrDefault();
             
             // 计算自版本源以来的提交数
-            var commitsSinceVersion = CalculateCommitsSinceVersion(repo, tags.FirstOrDefault());
+            var commitsSinceVersion = CalculateCommitsSinceVersion(repo, latestVersionTag);
             
             return new GitInfo
             {
@@ -71,7 +80,8 @@ public class GitService
                 CommitDate = commitDate,
                 UncommittedChanges = uncommittedChanges,
                 CommitsSinceVersionSource = commitsSinceVersion,
-                VersionSourceSha = tags.FirstOrDefault()?.Target.Sha ?? string.Empty
+                VersionSourceSha = latestVersionTag?.Target.Sha ?? currentCommit.Sha,
+                LatestTag = latestVersionTag?.FriendlyName
             };
         }
         catch (RepositoryNotFoundException ex)
@@ -139,13 +149,32 @@ public class GitService
     
     private int CalculateCommitsSinceVersion(Repository repo, Tag? versionTag)
     {
-        if (versionTag == null) return 0;
+        if (repo.Head?.Tip == null) return 0;
+        
+        var headCommit = repo.Head.Tip;
+
+        if (versionTag == null)
+        {
+            try
+            {
+                return repo.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = headCommit }).Count();
+            }
+            catch
+            {
+                return 1; 
+            }
+        }
+
+        if (headCommit.Sha == versionTag.Target.Sha)
+        {
+            return 0;
+        }
         
         try
         {
             var filter = new CommitFilter
             {
-                IncludeReachableFrom = repo.Head,
+                IncludeReachableFrom = headCommit,
                 ExcludeReachableFrom = versionTag.Target
             };
             
@@ -153,7 +182,7 @@ public class GitService
         }
         catch
         {
-            return 0;
+            return repo.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = headCommit }).Count();
         }
     }
 } 

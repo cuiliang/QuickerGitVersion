@@ -1,4 +1,6 @@
 using QuickerGitVersion.Models;
+using System;
+using System.Text.RegularExpressions;
 
 namespace QuickerGitVersion.Services;
 
@@ -8,12 +10,13 @@ public class VersionService
     {
         var versionInfo = new VersionInfo();
         
-        // 解析基础版本号（简化版本，实际应从Git标签解析）
-        versionInfo.Major = 1;
-        versionInfo.Minor = 100;
-        versionInfo.Patch = 1;
+        // 1. 解析基础版本
+        ParseBaseVersion(gitInfo, versionInfo);
         
-        // 设置基础属性
+        // 2. 根据提交数增加版本
+        IncrementVersion(gitInfo, versionInfo);
+
+        // 3. 设置基础属性
         versionInfo.BranchName = gitInfo.BranchName;
         versionInfo.EscapedBranchName = EscapeBranchName(gitInfo.BranchName);
         versionInfo.Sha = gitInfo.Sha;
@@ -23,13 +26,13 @@ public class VersionService
         versionInfo.UncommittedChanges = gitInfo.UncommittedChanges;
         versionInfo.VersionSourceSha = gitInfo.VersionSourceSha;
         
-        // 计算版本字符串
+        // 4. 计算版本字符串
         versionInfo.MajorMinorPatch = $"{versionInfo.Major}.{versionInfo.Minor}.{versionInfo.Patch}";
         versionInfo.AssemblySemVer = $"{versionInfo.MajorMinorPatch}.0";
         versionInfo.AssemblySemFileVer = versionInfo.AssemblySemVer;
         
-        // 预发布版本处理
-        if (!IsMainBranch(gitInfo.BranchName))
+        // 5. 预发布版本处理
+        if (!IsMainBranch(gitInfo.BranchName) && gitInfo.CommitsSinceVersionSource > 0)
         {
             versionInfo.PreReleaseLabel = versionInfo.EscapedBranchName;
             versionInfo.PreReleaseLabelWithDash = $"-{versionInfo.EscapedBranchName}";
@@ -38,26 +41,74 @@ public class VersionService
             versionInfo.PreReleaseTag = $"{versionInfo.EscapedBranchName}.{versionInfo.PreReleaseNumber}";
             versionInfo.PreReleaseTagWithDash = $"-{versionInfo.EscapedBranchName}.{versionInfo.PreReleaseNumber}";
             
-            versionInfo.SemVer = $"{versionInfo.MajorMinorPatch}-{versionInfo.EscapedBranchName}.{versionInfo.PreReleaseNumber}";
+            versionInfo.SemVer = $"{versionInfo.MajorMinorPatch}{versionInfo.PreReleaseTagWithDash}";
             versionInfo.FullSemVer = versionInfo.SemVer;
         }
         else
         {
             versionInfo.SemVer = versionInfo.MajorMinorPatch;
-            versionInfo.FullSemVer = versionInfo.SemVer;
+            versionInfo.FullSemVer = versionInfo.MajorMinorPatch;
             versionInfo.PreReleaseLabel = string.Empty;
             versionInfo.PreReleaseLabelWithDash = string.Empty;
             versionInfo.PreReleaseTag = string.Empty;
             versionInfo.PreReleaseTagWithDash = string.Empty;
         }
         
-        // 构建元数据
-        versionInfo.FullBuildMetaData = $"Branch.{versionInfo.EscapedBranchName}.Sha.{versionInfo.Sha}";
-        versionInfo.InformationalVersion = $"{versionInfo.FullSemVer}+{versionInfo.FullBuildMetaData}";
+        // 6. 构建元数据
+        var buildMetadata = $"Branch.{versionInfo.EscapedBranchName}.Sha.{versionInfo.Sha}";
+        if (gitInfo.UncommittedChanges > 0)
+        {
+            buildMetadata += $".UncommittedChanges.{gitInfo.UncommittedChanges}";
+        }
+        versionInfo.FullBuildMetaData = buildMetadata;
+        versionInfo.InformationalVersion = $"{versionInfo.FullSemVer}+{buildMetadata}";
         
         return versionInfo;
     }
     
+    private void ParseBaseVersion(GitInfo gitInfo, VersionInfo versionInfo)
+    {
+        if (!string.IsNullOrEmpty(gitInfo.LatestTag))
+        {
+            try
+            {
+                var versionString = gitInfo.LatestTag.TrimStart('v');
+                var version = new Version(versionString);
+                versionInfo.Major = version.Major;
+                versionInfo.Minor = version.Minor;
+                versionInfo.Patch = version.Build >= 0 ? version.Build : 0;
+            }
+            catch
+            {
+                // Fallback if tag parsing fails
+                SetDefaultVersion(versionInfo);
+            }
+        }
+        else
+        {
+            SetDefaultVersion(versionInfo);
+        }
+    }
+
+    private void SetDefaultVersion(VersionInfo versionInfo)
+    {
+        versionInfo.Major = 0;
+        versionInfo.Minor = 1;
+        versionInfo.Patch = 0;
+    }
+
+    private void IncrementVersion(GitInfo gitInfo, VersionInfo versionInfo)
+    {
+        // Only increment if there are commits since the tag
+        if (gitInfo.CommitsSinceVersionSource > 0)
+        {
+            // For non-main branches, patch is typically incremented.
+            // For main branch, it depends on convention (minor or patch).
+            // Here, we'll increment patch for simplicity.
+            versionInfo.Patch += gitInfo.CommitsSinceVersionSource;
+        }
+    }
+
     private string EscapeBranchName(string branchName)
     {
         if (string.IsNullOrEmpty(branchName))
@@ -65,24 +116,7 @@ public class VersionService
             return "unknown";
         }
         
-        // 处理超长分支名
-        const int maxLength = 50;
-        if (branchName.Length > maxLength)
-        {
-            branchName = branchName.Substring(0, maxLength - 3) + "...";
-        }
-        
-        // 转义特殊字符
-        return branchName
-            .Replace("/", "-")
-            .Replace("\\", "-")
-            .Replace(":", "-")
-            .Replace("*", "-")
-            .Replace("?", "-")
-            .Replace("\"", "-")
-            .Replace("<", "-")
-            .Replace(">", "-")
-            .Replace("|", "-");
+        return Regex.Replace(branchName, @"[^a-zA-Z0-9-]", "-");
     }
     
     private bool IsMainBranch(string branchName)

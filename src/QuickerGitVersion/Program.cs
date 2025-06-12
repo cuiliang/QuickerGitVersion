@@ -43,9 +43,10 @@ class Program
         // 设置日志
         using var loggerFactory = LoggerFactory.Create(builder =>
         {
-            builder.AddConsole(options =>
+            builder.AddSimpleConsole(options =>
             {
                 options.TimestampFormat = "[yyyy-MM-dd HH:mm:ss] ";
+                options.SingleLine = true;
             });
             
             builder.SetMinimumLevel(verbose ? LogLevel.Debug : LogLevel.Information);
