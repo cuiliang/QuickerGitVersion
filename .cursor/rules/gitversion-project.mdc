@@ -1,5 +1,191 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
+# GitVersion C# 命令行工具开发指南
+
+## 项目概述
+本项目是一个C#命令行工具，实现GitVersion的核心功能，生成版本信息文件。工具在Git仓库目录中运行，生成三个版本文件：gitversion.json、gitversion.props、gitversion.properties。
+
+## 项目结构
+```
+QuickerGitVersion/
+├── src/
+│   ├── QuickerGitVersion/                # 主项目
+│   │   ├── Program.cs                    # 程序入口点
+│   │   ├── GitVersionCalculator.cs      # 版本计算核心逻辑
+│   │   ├── Models/                       # 数据模型
+│   │   │   ├── VersionInfo.cs           # 版本信息模型
+│   │   │   └── GitInfo.cs               # Git信息模型
+│   │   ├── Services/                     # 服务层
+│   │   │   ├── GitService.cs            # Git操作服务
+│   │   │   ├── VersionService.cs        # 版本生成服务
+│   │   │   └── FileGeneratorService.cs  # 文件生成服务
+│   │   ├── Utils/                        # 工具类
+│   │   │   └── FileHelper.cs            # 文件操作辅助
+│   │   └── QuickerGitVersion.csproj     # 项目文件
+│   └── QuickerGitVersion.Tests/         # 单元测试项目
+├── doc/                                  # 文档目录
+└── README.md                             # 项目说明
+```
+
+## 核心功能要求
+
+### 1. 版本信息计算
+- 解析Git历史记录，确定当前版本
+- 计算分支名称、提交数量、SHA值
+- 支持语义版本控制（SemVer）
+- 处理预发布标签和构建元数据
+
+### 2. 输出文件格式
+
+#### gitversion.json 示例结构：
+```json
+{
+  "AssemblySemFileVer": "1.100.1.0",
+  "AssemblySemVer": "1.100.1.0",
+  "BranchName": "v2/try1",
+  "BuildMetaData": null,
+  "CommitDate": "2025-06-11",
+  "CommitsSinceVersionSource": 9,
+  "EscapedBranchName": "v2-try1",
+  "FullBuildMetaData": "Branch.v2-try1.Sha.7a1c4caa664beb914c154d1aede48b078989e635",
+  "FullSemVer": "1.100.1-{BranchName}.9",
+  "InformationalVersion": "1.100.1-{BranchName}.9+Branch.v2-try1.Sha.7a1c4caa664beb914c154d1aede48b078989e635",
+  "Major": 1,
+  "MajorMinorPatch": "1.100.1",
+  "Minor": 100,
+  "Patch": 1,
+  "PreReleaseLabel": "{BranchName}",
+  "PreReleaseLabelWithDash": "-{BranchName}",
+  "PreReleaseNumber": 9,
+  "PreReleaseTag": "{BranchName}.9",
+  "PreReleaseTagWithDash": "-{BranchName}.9",
+  "SemVer": "1.100.1-{BranchName}.9",
+  "Sha": "7a1c4caa664beb914c154d1aede48b078989e635",
+  "ShortSha": "7a1c4ca",
+  "UncommittedChanges": 4,
+  "VersionSourceSha": "ac90b36bd5b1d517b4b8c7572b198225e8cc18cf",
+  "WeightedPreReleaseNumber": 9
+}
+```
+
+#### gitversion.props 格式（MSBuild属性文件）：
+```xml
+<Project>
+  <PropertyGroup>
+    <GitVersion_AssemblySemFileVer>1.100.1.0</GitVersion_AssemblySemFileVer>
+    <GitVersion_AssemblySemVer>1.100.1.0</GitVersion_AssemblySemVer>
+    <GitVersion_BranchName>v2/try1</GitVersion_BranchName>
+    <!-- 其他属性... -->
+  </PropertyGroup>
+</Project>
+```
+
+#### gitversion.properties 格式（Java属性文件）：
+```properties
+GitVersion.AssemblySemFileVer=1.100.1.0
+GitVersion.AssemblySemVer=1.100.1.0
+GitVersion.BranchName=v2/try1
+# 其他属性...
+```
+
+## 技术栈和依赖
+
+### 推荐NuGet包：
+- `LibGit2Sharp` - Git操作库
+- `System.CommandLine` - 命令行参数解析
+- `System.Text.Json` - JSON序列化
+- `Microsoft.Extensions.Logging` - 日志记录
+
+### 项目文件配置：
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="LibGit2Sharp" Version="0.30.0" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+    <PackageReference Include="System.Text.Json" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="8.0.0" />
+  </ItemGroup>
+</Project>
+```
+
+## 核心类设计指导
+
+### VersionInfo 模型：
+- 包含所有版本相关属性
+- 支持JSON序列化
+- 提供MSBuild属性格式化方法
+- 提供Properties文件格式化方法
+
+### GitService 服务：
+- 使用LibGit2Sharp获取Git信息
+- 获取当前分支名
+- 计算提交数量和SHA值
+- 检测未提交更改
+
+### VersionService 服务：
+- 实现版本计算逻辑
+- 解析语义版本标签
+- 计算预发布版本号
+- 生成构建元数据
+
+### FileGeneratorService 服务：
+- 生成JSON文件
+- 生成MSBuild属性文件
+- 生成Java属性文件
+- 处理文件写入异常
+
+## 命令行接口设计
+```bash
+QuickerGitVersion.exe [选项]
+
+选项:
+  -o, --output <目录>    输出目录（默认为当前目录）
+  -v, --verbose         详细输出
+  --json-only           只生成JSON文件
+  --props-only          只生成Props文件
+  --properties-only     只生成Properties文件
+  -h, --help           显示帮助信息
+```
+
+## 开发最佳实践
+
+1. **错误处理**：妥善处理Git仓库不存在、权限不足等异常情况
+2. **日志记录**：使用结构化日志记录关键操作
+3. **单元测试**：为核心逻辑编写全面的单元测试
+4. **配置驱动**：支持通过配置文件自定义版本计算规则
+5. **性能优化**：缓存Git操作结果，避免重复计算
+
+## 版本计算算法参考
+
+1. **基础版本确定**：
+   - 查找最新的版本标签
+   - 解析主版本号、次版本号、补丁版本号
+
+2. **预发布版本计算**：
+   - 分支名作为预发布标签
+   - 自版本源以来的提交数作为预发布编号
+
+3. **构建元数据生成**：
+   - 包含分支名、SHA值等信息
+   - 格式化为规范的构建元数据字符串
+
+## 测试策略
+
+- 创建测试Git仓库进行集成测试
+- 模拟不同分支场景和版本标签情况
+- 验证生成文件的格式和内容正确性
+- 测试命令行参数解析和错误处理
+

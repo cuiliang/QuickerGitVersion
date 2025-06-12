@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("QuickerGitVersion.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ed754d8977ae9b0819dff71ef8e2501c3058d1a6")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4306f3e8f57c560db529e826a60880ada2a77643")]
 [assembly: System.Reflection.AssemblyProductAttribute("QuickerGitVersion.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("QuickerGitVersion.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

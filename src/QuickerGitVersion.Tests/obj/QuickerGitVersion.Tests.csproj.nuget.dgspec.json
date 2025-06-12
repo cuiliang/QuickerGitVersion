@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\QuickerGitVersion.Tests.csproj": {}
+    "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\QuickerGitVersion.Tests.csproj": {}
   },
   "projects": {
-    "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\QuickerGitVersion.Tests.csproj": {
+    "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\QuickerGitVersion.Tests.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\QuickerGitVersion.Tests.csproj",
+        "projectUniqueName": "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\QuickerGitVersion.Tests.csproj",
         "projectName": "QuickerGitVersion.Tests",
-        "projectPath": "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\QuickerGitVersion.Tests.csproj",
+        "projectPath": "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\QuickerGitVersion.Tests.csproj",
         "packagesPath": "F:\\_nuget",
-        "outputPath": "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\obj\\",
+        "outputPath": "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -34,8 +34,8 @@
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj": {
-                "projectPath": "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj"
+              "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj": {
+                "projectPath": "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj"
               }
             }
           }
@@ -101,14 +101,14 @@
         }
       }
     },
-    "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj": {
+    "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj",
+        "projectUniqueName": "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj",
         "projectName": "QuickerGitVersion",
-        "projectPath": "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj",
+        "projectPath": "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj",
         "packagesPath": "F:\\_nuget",
-        "outputPath": "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion\\obj\\",
+        "outputPath": "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

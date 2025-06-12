@@ -1,5 +1,471 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
+# GitVersion 错误处理和边界情况规则
+
+## 常见错误情况和处理方案
+
+### 1. Git 仓库相关错误
+
+#### 不在Git仓库中
+```csharp
+public class GitService
+{
+    public GitInfo GetGitInfo(string repositoryPath)
+    {
+        try
+        {
+            // 检查目录是否包含.git文件夹
+            if (!Repository.IsValid(repositoryPath))
+            {
+                throw new InvalidOperationException("当前目录不是有效的Git仓库");
+            }
+            
+            using var repo = new Repository(repositoryPath);
+            // ... 其他逻辑
+        }
+        catch (RepositoryNotFoundException ex)
+        {
+            throw new InvalidOperationException("未找到Git仓库，请在Git仓库目录中运行此命令", ex);
+        }
+        catch (LibGit2SharpException ex)
+        {
+            throw new InvalidOperationException($"Git操作失败: {ex.Message}", ex);
+        }
+    }
+}
+```
+
+#### 空仓库（无提交）
+```csharp
+public GitInfo GetGitInfo(string repositoryPath)
+{
+    using var repo = new Repository(repositoryPath);
+    
+    // 检查仓库是否为空
+    if (repo.Head?.Tip == null)
+    {
+        return new GitInfo
+        {
+            BranchName = "HEAD",
+            Sha = string.Empty,
+            ShortSha = string.Empty,
+            CommitDate = DateTime.Now.ToString("yyyy-MM-dd"),
+            UncommittedChanges = 0,
+            CommitsSinceVersionSource = 0,
+            VersionSourceSha = string.Empty
+        };
+    }
+    
+    // 正常处理逻辑...
+}
+```
+
+#### 分离HEAD状态
+```csharp
+private string GetBranchName(Repository repo)
+{
+    if (repo.Head.IsCurrentRepositoryHead)
+    {
+        // 正常分支
+        return repo.Head.FriendlyName;
+    }
+    else
+    {
+        // 分离HEAD状态，使用提交SHA作为标识
+        return $"HEAD-{repo.Head.Tip.Sha.Substring(0, 8)}";
+    }
+}
+```
+
+### 2. 文件操作错误处理
+
+#### 文件写入权限问题
+```csharp
+public class FileGeneratorService
+{
+    public async Task GenerateJsonFileAsync(VersionInfo versionInfo, string outputPath)
+    {
+        try
+        {
+            // 检查目录是否存在，不存在则创建
+            if (!Directory.Exists(outputPath))
+            {
+                Directory.CreateDirectory(outputPath);
+            }
+            
+            var filePath = Path.Combine(outputPath, "gitversion.json");
+            
+            // 检查文件是否被锁定
+            await CheckFileAccessAsync(filePath);
+            
+            var jsonOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = null
+            };
+            
+            var jsonContent = JsonSerializer.Serialize(versionInfo, jsonOptions);
+            await File.WriteAllTextAsync(filePath, jsonContent, Encoding.UTF8);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new InvalidOperationException($"没有权限写入文件到目录: {outputPath}", ex);
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            throw new InvalidOperationException($"输出目录不存在: {outputPath}", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException($"文件IO错误: {ex.Message}", ex);
+        }
+    }
+    
+    private async Task CheckFileAccessAsync(string filePath)
+    {
+        if (File.Exists(filePath))
+        {
+            try
+            {
+                // 尝试打开文件检查是否被锁定
+                using var stream = File.Open(filePath, FileMode.Open, FileAccess.Write, FileShare.None);
+            }
+            catch (IOException)
+            {
+                throw new InvalidOperationException($"文件被其他进程占用: {Path.GetFileName(filePath)}");
+            }
+        }
+    }
+}
+```
+
+### 3. 版本解析错误处理
+
+#### 无效的版本标签
+```csharp
+public class VersionService
+{
+    private SemanticVersion? ParseVersionTag(string tagName)
+    {
+        try
+        {
+            // 移除v前缀
+            var versionString = tagName.StartsWith("v") ? tagName.Substring(1) : tagName;
+            
+            // 尝试解析语义版本
+            if (SemanticVersion.TryParse(versionString, out var version))
+            {
+                return version;
+            }
+            
+            // 尝试解析简单版本格式 (1.0.0)
+            var parts = versionString.Split('.');
+            if (parts.Length >= 3 && 
+                int.TryParse(parts[0], out var major) &&
+                int.TryParse(parts[1], out var minor) &&
+                int.TryParse(parts[2], out var patch))
+            {
+                return new SemanticVersion(major, minor, patch);
+            }
+            
+            return null;
+        }
+        catch (Exception ex)
+        {
+            // 记录日志但不抛出异常，跳过无效标签
+            Console.WriteLine($"警告: 无法解析版本标签 '{tagName}': {ex.Message}");
+            return null;
+        }
+    }
+    
+    public VersionInfo CalculateVersion(GitInfo gitInfo)
+    {
+        // 如果没有找到有效的版本标签，使用默认版本
+        var baseVersion = GetBaseVersionFromTags(gitInfo) ?? new SemanticVersion(0, 1, 0);
+        
+        // ... 其他计算逻辑
+    }
+}
+```
+
+### 4. 网络和权限相关错误
+
+#### Git远程操作超时
+```csharp
+public class GitService
+{
+    private readonly GitOperationOptions _options = new GitOperationOptions
+    {
+        Timeout = TimeSpan.FromSeconds(30)
+    };
+    
+    public GitInfo GetGitInfo(string repositoryPath)
+    {
+        try
+        {
+            using var repo = new Repository(repositoryPath);
+            
+            // 设置操作超时
+            var fetchOptions = new FetchOptions
+            {
+                OnTransferProgress = (stats) => true,
+                OnUpdateTips = (name, oldId, newId) => true
+            };
+            
+            // 尝试获取远程信息（可选）
+            try
+            {
+                // 这里可以添加远程分支信息获取逻辑
+                // 但要处理网络超时的情况
+            }
+            catch (TimeoutException)
+            {
+                // 网络超时时使用本地信息
+                Console.WriteLine("警告: 无法连接到远程仓库，使用本地信息");
+            }
+            
+            // ... 继续使用本地仓库信息
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"Git操作失败: {ex.Message}", ex);
+        }
+    }
+}
+```
+
+### 5. 命令行参数验证
+
+#### 输出目录验证
+```csharp
+public class Program
+{
+    static async Task ExecuteAsync(string output, bool verbose, bool jsonOnly, bool propsOnly, bool propertiesOnly)
+    {
+        var logger = CreateLogger(verbose);
+        
+        try
+        {
+            // 验证输出目录
+            if (!ValidateOutputDirectory(output, logger))
+            {
+                return;
+            }
+            
+            // 验证互斥选项
+            if (CountTrueOptions(jsonOnly, propsOnly, propertiesOnly) > 1)
+            {
+                logger.LogError("只能选择一种输出格式选项");
+                return;
+            }
+            
+            // ... 其他逻辑
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "执行过程中发生错误");
+            Environment.Exit(1);
+        }
+    }
+    
+    private static bool ValidateOutputDirectory(string output, ILogger logger)
+    {
+        try
+        {
+            // 检查路径是否有效
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                logger.LogError("输出目录不能为空");
+                return false;
+            }
+            
+            // 尝试获取绝对路径
+            var fullPath = Path.GetFullPath(output);
+            
+            // 检查是否有写入权限
+            if (!HasWritePermission(fullPath))
+            {
+                logger.LogError($"没有权限写入到目录: {fullPath}");
+                return false;
+            }
+            
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, $"输出目录验证失败: {output}");
+            return false;
+        }
+    }
+    
+    private static bool HasWritePermission(string directoryPath)
+    {
+        try
+        {
+            // 如果目录不存在，检查父目录权限
+            if (!Directory.Exists(directoryPath))
+            {
+                var parentDir = Directory.GetParent(directoryPath);
+                if (parentDir?.Exists == true)
+                {
+                    directoryPath = parentDir.FullName;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            
+            // 尝试创建临时文件检查权限
+            var tempFile = Path.Combine(directoryPath, Path.GetRandomFileName());
+            File.WriteAllText(tempFile, "test");
+            File.Delete(tempFile);
+            
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    
+    private static int CountTrueOptions(params bool[] options)
+    {
+        return options.Count(o => o);
+    }
+}
+```
+
+### 6. 日志和诊断
+
+#### 结构化日志记录
+```csharp
+public class Program
+{
+    private static ILogger CreateLogger(bool verbose)
+    {
+        var loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.AddConsole(options =>
+            {
+                options.TimestampFormat = "[yyyy-MM-dd HH:mm:ss] ";
+                options.IncludeScopes = true;
+            });
+            
+            builder.SetMinimumLevel(verbose ? LogLevel.Debug : LogLevel.Information);
+        });
+        
+        return loggerFactory.CreateLogger<Program>();
+    }
+}
+
+// 在各个服务中使用结构化日志
+public class GitService
+{
+    private readonly ILogger<GitService> _logger;
+    
+    public GitInfo GetGitInfo(string repositoryPath)
+    {
+        _logger.LogDebug("开始获取Git信息，路径: {RepositoryPath}", repositoryPath);
+        
+        try
+        {
+            using var repo = new Repository(repositoryPath);
+            var gitInfo = // ... 获取信息
+            
+            _logger.LogInformation("成功获取Git信息 - 分支: {BranchName}, SHA: {ShortSha}", 
+                gitInfo.BranchName, gitInfo.ShortSha);
+            
+            return gitInfo;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "获取Git信息失败，路径: {RepositoryPath}", repositoryPath);
+            throw;
+        }
+    }
+}
+```
+
+### 7. 边界情况处理
+
+#### 超长分支名处理
+```csharp
+private string EscapeBranchName(string branchName)
+{
+    if (string.IsNullOrEmpty(branchName))
+    {
+        return "unknown";
+    }
+    
+    // 处理超长分支名
+    const int maxLength = 50;
+    if (branchName.Length > maxLength)
+    {
+        branchName = branchName.Substring(0, maxLength - 3) + "...";
+    }
+    
+    // 转义特殊字符
+    return branchName
+        .Replace("/", "-")
+        .Replace("\\", "-")
+        .Replace(":", "-")
+        .Replace("*", "-")
+        .Replace("?", "-")
+        .Replace("\"", "-")
+        .Replace("<", "-")
+        .Replace(">", "-")
+        .Replace("|", "-");
+}
+```
+
+#### 大型仓库性能优化
+```csharp
+public class GitService
+{
+    // 缓存Git信息避免重复计算
+    private static readonly ConcurrentDictionary<string, GitInfo> _gitInfoCache = new();
+    
+    public GitInfo GetGitInfo(string repositoryPath)
+    {
+        var cacheKey = Path.GetFullPath(repositoryPath);
+        
+        return _gitInfoCache.GetOrAdd(cacheKey, key =>
+        {
+            return GetGitInfoInternal(key);
+        });
+    }
+    
+    private GitInfo GetGitInfoInternal(string repositoryPath)
+    {
+        using var repo = new Repository(repositoryPath);
+        
+        // 对于大型仓库，限制历史查询深度
+        const int maxCommitCount = 10000;
+        
+        var commitFilter = new CommitFilter
+        {
+            SortBy = CommitSortStrategies.Topological | CommitSortStrategies.Time,
+            FirstParentOnly = true // 只查看主线提交，提高性能
+        };
+        
+        var commits = repo.Commits.QueryBy(commitFilter).Take(maxCommitCount).ToList();
+        
+        // ... 使用限制后的提交列表进行计算
+    }
+}
+```
+
+## 错误处理最佳实践
+
+1. **异常分层**：区分系统异常和业务异常
+2. **用户友好**：提供清晰的错误消息和解决建议
+3. **日志记录**：记录详细的错误信息用于调试
+4. **优雅降级**：在部分功能失败时继续执行
+5. **资源清理**：确保在异常情况下正确释放资源
+6. **超时处理**：对可能长时间运行的操作设置超时
+7. **重试机制**：对临时性错误实现重试逻辑
+

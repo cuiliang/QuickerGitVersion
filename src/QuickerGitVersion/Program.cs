@@ -78,7 +78,20 @@ class Program
             logger.LogInformation("开始获取Git信息...");
             
             // 获取Git信息
-            var gitInfo = gitService.GetGitInfo(Directory.GetCurrentDirectory());
+            var currentDir = Directory.GetCurrentDirectory();
+            var gitInfo = gitService.GetGitInfo(currentDir);
+            
+            // 显示仓库信息
+            if (verbose)
+            {
+                logger.LogDebug($"当前工作目录: {currentDir}");
+                if (gitService.LastFoundRepositoryPath != null && 
+                    !string.Equals(gitService.LastFoundRepositoryPath, currentDir, StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogDebug($"Git仓库根目录: {gitService.LastFoundRepositoryPath}");
+                }
+            }
+            
             logger.LogInformation($"处理分支: {gitInfo.BranchName}");
             logger.LogDebug($"当前提交: {gitInfo.ShortSha}");
             logger.LogDebug($"自版本源以来的提交数: {gitInfo.CommitsSinceVersionSource}");

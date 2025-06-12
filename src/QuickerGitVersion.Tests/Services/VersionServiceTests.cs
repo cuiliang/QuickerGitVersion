@@ -58,8 +58,8 @@ public class VersionServiceTests
         versionInfo.BranchName.Should().Be("feature/new-feature");
         versionInfo.EscapedBranchName.Should().Be("feature-new-feature");
         versionInfo.PreReleaseNumber.Should().Be(5);
-        versionInfo.SemVer.Should().Contain("{BranchName}");
-        versionInfo.PreReleaseLabel.Should().Be("{BranchName}");
+        versionInfo.SemVer.Should().Be("1.100.1-feature-new-feature.5");
+        versionInfo.PreReleaseLabel.Should().Be("feature-new-feature");
     }
 
     [Theory]

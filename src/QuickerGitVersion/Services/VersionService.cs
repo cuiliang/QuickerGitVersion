@@ -31,14 +31,14 @@ public class VersionService
         // 预发布版本处理
         if (!IsMainBranch(gitInfo.BranchName))
         {
-            versionInfo.PreReleaseLabel = "{BranchName}";
-            versionInfo.PreReleaseLabelWithDash = "-{BranchName}";
+            versionInfo.PreReleaseLabel = versionInfo.EscapedBranchName;
+            versionInfo.PreReleaseLabelWithDash = $"-{versionInfo.EscapedBranchName}";
             versionInfo.PreReleaseNumber = gitInfo.CommitsSinceVersionSource;
             versionInfo.WeightedPreReleaseNumber = versionInfo.PreReleaseNumber;
-            versionInfo.PreReleaseTag = $"{{BranchName}}.{versionInfo.PreReleaseNumber}";
-            versionInfo.PreReleaseTagWithDash = $"-{{BranchName}}.{versionInfo.PreReleaseNumber}";
+            versionInfo.PreReleaseTag = $"{versionInfo.EscapedBranchName}.{versionInfo.PreReleaseNumber}";
+            versionInfo.PreReleaseTagWithDash = $"-{versionInfo.EscapedBranchName}.{versionInfo.PreReleaseNumber}";
             
-            versionInfo.SemVer = $"{versionInfo.MajorMinorPatch}-{{BranchName}}.{versionInfo.PreReleaseNumber}";
+            versionInfo.SemVer = $"{versionInfo.MajorMinorPatch}-{versionInfo.EscapedBranchName}.{versionInfo.PreReleaseNumber}";
             versionInfo.FullSemVer = versionInfo.SemVer;
         }
         else

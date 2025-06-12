@@ -1,5 +1,431 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
+# GitVersion 实现指导规则
+
+## 核心类实现模板
+
+### 1. VersionInfo 模型类
+```csharp
+using System.Text.Json.Serialization;
+
+namespace QuickerGitVersion.Models
+{
+    public class VersionInfo
+    {
+        [JsonPropertyName("AssemblySemFileVer")]
+        public string AssemblySemFileVer { get; set; } = string.Empty;
+        
+        [JsonPropertyName("AssemblySemVer")]
+        public string AssemblySemVer { get; set; } = string.Empty;
+        
+        [JsonPropertyName("BranchName")]
+        public string BranchName { get; set; } = string.Empty;
+        
+        [JsonPropertyName("BuildMetaData")]
+        public string? BuildMetaData { get; set; }
+        
+        [JsonPropertyName("CommitDate")]
+        public string CommitDate { get; set; } = string.Empty;
+        
+        [JsonPropertyName("CommitsSinceVersionSource")]
+        public int CommitsSinceVersionSource { get; set; }
+        
+        [JsonPropertyName("EscapedBranchName")]
+        public string EscapedBranchName { get; set; } = string.Empty;
+        
+        [JsonPropertyName("FullBuildMetaData")]
+        public string FullBuildMetaData { get; set; } = string.Empty;
+        
+        [JsonPropertyName("FullSemVer")]
+        public string FullSemVer { get; set; } = string.Empty;
+        
+        [JsonPropertyName("InformationalVersion")]
+        public string InformationalVersion { get; set; } = string.Empty;
+        
+        [JsonPropertyName("Major")]
+        public int Major { get; set; }
+        
+        [JsonPropertyName("MajorMinorPatch")]
+        public string MajorMinorPatch { get; set; } = string.Empty;
+        
+        [JsonPropertyName("Minor")]
+        public int Minor { get; set; }
+        
+        [JsonPropertyName("Patch")]
+        public int Patch { get; set; }
+        
+        [JsonPropertyName("PreReleaseLabel")]
+        public string PreReleaseLabel { get; set; } = string.Empty;
+        
+        [JsonPropertyName("PreReleaseLabelWithDash")]
+        public string PreReleaseLabelWithDash { get; set; } = string.Empty;
+        
+        [JsonPropertyName("PreReleaseNumber")]
+        public int PreReleaseNumber { get; set; }
+        
+        [JsonPropertyName("PreReleaseTag")]
+        public string PreReleaseTag { get; set; } = string.Empty;
+        
+        [JsonPropertyName("PreReleaseTagWithDash")]
+        public string PreReleaseTagWithDash { get; set; } = string.Empty;
+        
+        [JsonPropertyName("SemVer")]
+        public string SemVer { get; set; } = string.Empty;
+        
+        [JsonPropertyName("Sha")]
+        public string Sha { get; set; } = string.Empty;
+        
+        [JsonPropertyName("ShortSha")]
+        public string ShortSha { get; set; } = string.Empty;
+        
+        [JsonPropertyName("UncommittedChanges")]
+        public int UncommittedChanges { get; set; }
+        
+        [JsonPropertyName("VersionSourceSha")]
+        public string VersionSourceSha { get; set; } = string.Empty;
+        
+        [JsonPropertyName("WeightedPreReleaseNumber")]
+        public int WeightedPreReleaseNumber { get; set; }
+    }
+}
+```
+
+### 2. GitService 实现要点
+```csharp
+using LibGit2Sharp;
+
+namespace QuickerGitVersion.Services
+{
+    public class GitService
+    {
+        public GitInfo GetGitInfo(string repositoryPath)
+        {
+            using var repo = new Repository(repositoryPath);
+            
+            // 获取当前分支名
+            var branchName = repo.Head.FriendlyName;
+            
+            // 获取当前提交
+            var currentCommit = repo.Head.Tip;
+            
+            // 获取SHA值
+            var sha = currentCommit.Sha;
+            var shortSha = sha.Substring(0, 7);
+            
+            // 计算未提交更改数量
+            var status = repo.RetrieveStatus();
+            var uncommittedChanges = status.Count();
+            
+            // 获取提交日期
+            var commitDate = currentCommit.Author.When.ToString("yyyy-MM-dd");
+            
+            // 查找版本标签
+            var tags = repo.Tags
+                .Where(t => IsVersionTag(t.FriendlyName))
+                .OrderByDescending(t => t.Target.Committer.When)
+                .ToList();
+            
+            // 计算自版本源以来的提交数
+            var commitsSinceVersion = CalculateCommitsSinceVersion(repo, tags.FirstOrDefault());
+            
+            return new GitInfo
+            {
+                BranchName = branchName,
+                Sha = sha,
+                ShortSha = shortSha,
+                CommitDate = commitDate,
+                UncommittedChanges = uncommittedChanges,
+                CommitsSinceVersionSource = commitsSinceVersion,
+                VersionSourceSha = tags.FirstOrDefault()?.Target.Sha ?? string.Empty
+            };
+        }
+        
+        private bool IsVersionTag(string tagName)
+        {
+            return System.Text.RegularExpressions.Regex.IsMatch(tagName, @"^v?\d+\.\d+\.\d+");
+        }
+        
+        private int CalculateCommitsSinceVersion(Repository repo, Tag? versionTag)
+        {
+            if (versionTag == null) return 0;
+            
+            var filter = new CommitFilter
+            {
+                IncludeReachableFrom = repo.Head,
+                ExcludeReachableFrom = versionTag.Target
+            };
+            
+            return repo.Commits.QueryBy(filter).Count();
+        }
+    }
+}
+```
+
+### 3. VersionService 核心逻辑
+```csharp
+namespace QuickerGitVersion.Services
+{
+    public class VersionService
+    {
+        public VersionInfo CalculateVersion(GitInfo gitInfo)
+        {
+            var versionInfo = new VersionInfo();
+            
+            // 解析基础版本号（简化版本，实际应从Git标签解析）
+            versionInfo.Major = 1;
+            versionInfo.Minor = 100;
+            versionInfo.Patch = 1;
+            
+            // 设置基础属性
+            versionInfo.BranchName = gitInfo.BranchName;
+            versionInfo.EscapedBranchName = EscapeBranchName(gitInfo.BranchName);
+            versionInfo.Sha = gitInfo.Sha;
+            versionInfo.ShortSha = gitInfo.ShortSha;
+            versionInfo.CommitDate = gitInfo.CommitDate;
+            versionInfo.CommitsSinceVersionSource = gitInfo.CommitsSinceVersionSource;
+            versionInfo.UncommittedChanges = gitInfo.UncommittedChanges;
+            versionInfo.VersionSourceSha = gitInfo.VersionSourceSha;
+            
+            // 计算版本字符串
+            versionInfo.MajorMinorPatch = $"{versionInfo.Major}.{versionInfo.Minor}.{versionInfo.Patch}";
+            versionInfo.AssemblySemVer = $"{versionInfo.MajorMinorPatch}.0";
+            versionInfo.AssemblySemFileVer = versionInfo.AssemblySemVer;
+            
+            // 预发布版本处理
+            if (!IsMainBranch(gitInfo.BranchName))
+            {
+                versionInfo.PreReleaseLabel = "{BranchName}";
+                versionInfo.PreReleaseLabelWithDash = "-{BranchName}";
+                versionInfo.PreReleaseNumber = gitInfo.CommitsSinceVersionSource;
+                versionInfo.WeightedPreReleaseNumber = versionInfo.PreReleaseNumber;
+                versionInfo.PreReleaseTag = $"{{BranchName}}.{versionInfo.PreReleaseNumber}";
+                versionInfo.PreReleaseTagWithDash = $"-{{BranchName}}.{versionInfo.PreReleaseNumber}";
+                
+                versionInfo.SemVer = $"{versionInfo.MajorMinorPatch}-{{BranchName}}.{versionInfo.PreReleaseNumber}";
+                versionInfo.FullSemVer = versionInfo.SemVer;
+            }
+            else
+            {
+                versionInfo.SemVer = versionInfo.MajorMinorPatch;
+                versionInfo.FullSemVer = versionInfo.SemVer;
+            }
+            
+            // 构建元数据
+            versionInfo.FullBuildMetaData = $"Branch.{versionInfo.EscapedBranchName}.Sha.{versionInfo.Sha}";
+            versionInfo.InformationalVersion = $"{versionInfo.FullSemVer}+{versionInfo.FullBuildMetaData}";
+            
+            return versionInfo;
+        }
+        
+        private string EscapeBranchName(string branchName)
+        {
+            return branchName.Replace("/", "-").Replace("\\", "-");
+        }
+        
+        private bool IsMainBranch(string branchName)
+        {
+            return branchName.Equals("main", StringComparison.OrdinalIgnoreCase) ||
+                   branchName.Equals("master", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+}
+```
+
+### 4. FileGeneratorService 实现
+```csharp
+using System.Text.Json;
+using System.Text;
+
+namespace QuickerGitVersion.Services
+{
+    public class FileGeneratorService
+    {
+        public async Task GenerateJsonFileAsync(VersionInfo versionInfo, string outputPath)
+        {
+            var jsonOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = null
+            };
+            
+            var jsonContent = JsonSerializer.Serialize(versionInfo, jsonOptions);
+            var filePath = Path.Combine(outputPath, "gitversion.json");
+            
+            await File.WriteAllTextAsync(filePath, jsonContent, Encoding.UTF8);
+        }
+        
+        public async Task GeneratePropsFileAsync(VersionInfo versionInfo, string outputPath)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("<Project>");
+            sb.AppendLine("  <PropertyGroup>");
+            
+            // 使用反射获取所有属性并生成MSBuild属性
+            var properties = typeof(VersionInfo).GetProperties();
+            foreach (var prop in properties)
+            {
+                var value = prop.GetValue(versionInfo);
+                if (value != null)
+                {
+                    sb.AppendLine($"    <GitVersion_{prop.Name}>{value}</GitVersion_{prop.Name}>");
+                }
+            }
+            
+            sb.AppendLine("  </PropertyGroup>");
+            sb.AppendLine("</Project>");
+            
+            var filePath = Path.Combine(outputPath, "gitversion.props");
+            await File.WriteAllTextAsync(filePath, sb.ToString(), Encoding.UTF8);
+        }
+        
+        public async Task GeneratePropertiesFileAsync(VersionInfo versionInfo, string outputPath)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("# GitVersion Properties");
+            
+            // 使用反射获取所有属性并生成Java属性格式
+            var properties = typeof(VersionInfo).GetProperties();
+            foreach (var prop in properties)
+            {
+                var value = prop.GetValue(versionInfo);
+                if (value != null)
+                {
+                    sb.AppendLine($"GitVersion.{prop.Name}={value}");
+                }
+            }
+            
+            var filePath = Path.Combine(outputPath, "gitversion.properties");
+            await File.WriteAllTextAsync(filePath, sb.ToString(), Encoding.UTF8);
+        }
+    }
+}
+```
+
+### 5. Program.cs 主程序结构
+```csharp
+using System.CommandLine;
+using Microsoft.Extensions.Logging;
+using QuickerGitVersion.Services;
+
+namespace QuickerGitVersion
+{
+    class Program
+    {
+        static async Task<int> Main(string[] args)
+        {
+            var outputOption = new Option<string>(
+                aliases: new[] { "--output", "-o" },
+                description: "输出目录",
+                getDefaultValue: () => Directory.GetCurrentDirectory());
+            
+            var verboseOption = new Option<bool>(
+                aliases: new[] { "--verbose", "-v" },
+                description: "详细输出");
+            
+            var jsonOnlyOption = new Option<bool>("--json-only", "只生成JSON文件");
+            var propsOnlyOption = new Option<bool>("--props-only", "只生成Props文件");
+            var propertiesOnlyOption = new Option<bool>("--properties-only", "只生成Properties文件");
+            
+            var rootCommand = new RootCommand("GitVersion命令行工具")
+            {
+                outputOption,
+                verboseOption,
+                jsonOnlyOption,
+                propsOnlyOption,
+                propertiesOnlyOption
+            };
+            
+            rootCommand.SetHandler(async (output, verbose, jsonOnly, propsOnly, propertiesOnly) =>
+            {
+                await ExecuteAsync(output, verbose, jsonOnly, propsOnly, propertiesOnly);
+            }, outputOption, verboseOption, jsonOnlyOption, propsOnlyOption, propertiesOnlyOption);
+            
+            return await rootCommand.InvokeAsync(args);
+        }
+        
+        static async Task ExecuteAsync(string output, bool verbose, bool jsonOnly, bool propsOnly, bool propertiesOnly)
+        {
+            // 设置日志
+            using var loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                if (verbose) builder.SetMinimumLevel(LogLevel.Debug);
+            });
+            
+            var logger = loggerFactory.CreateLogger<Program>();
+            
+            try
+            {
+                // 检查是否在Git仓库中
+                var gitService = new GitService();
+                var versionService = new VersionService();
+                var fileGeneratorService = new FileGeneratorService();
+                
+                // 获取Git信息
+                var gitInfo = gitService.GetGitInfo(Directory.GetCurrentDirectory());
+                logger.LogInformation($"处理分支: {gitInfo.BranchName}");
+                
+                // 计算版本信息
+                var versionInfo = versionService.CalculateVersion(gitInfo);
+                logger.LogInformation($"计算版本: {versionInfo.FullSemVer}");
+                
+                // 生成文件
+                if (!propsOnly && !propertiesOnly)
+                {
+                    await fileGeneratorService.GenerateJsonFileAsync(versionInfo, output);
+                    logger.LogInformation("已生成 gitversion.json");
+                }
+                
+                if (!jsonOnly && !propertiesOnly)
+                {
+                    await fileGeneratorService.GeneratePropsFileAsync(versionInfo, output);
+                    logger.LogInformation("已生成 gitversion.props");
+                }
+                
+                if (!jsonOnly && !propsOnly)
+                {
+                    await fileGeneratorService.GeneratePropertiesFileAsync(versionInfo, output);
+                    logger.LogInformation("已生成 gitversion.properties");
+                }
+                
+                logger.LogInformation("版本文件生成完成");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "执行过程中发生错误");
+            }
+        }
+    }
+}
+```
+
+## 关键实现注意事项
+
+1. **异常处理**：
+   - 检查目录是否为Git仓库
+   - 处理LibGit2Sharp的异常
+   - 文件写入权限检查
+
+2. **版本标签解析**：
+   - 支持v1.0.0和1.0.0格式
+   - 处理语义版本的预发布标签
+   - 按时间排序找到最新版本
+
+3. **分支名处理**：
+   - 转义特殊字符（/、\等）
+   - 处理远程分支名前缀
+   - 支持不同的分支命名策略
+
+4. **性能优化**：
+   - 缓存Git操作结果
+   - 异步文件写入
+   - 批量处理Git历史查询
+
+5. **配置扩展**：
+   - 支持gitversion.yml配置文件
+   - 自定义版本计算规则
+   - 可配置的输出格式模板
+

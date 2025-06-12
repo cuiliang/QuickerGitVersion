@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "qDhvrXvvsqw=",
+  "dgSpecHash": "EWTykKgBhrk=",
   "success": true,
-  "projectFilePath": "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj",
+  "projectFilePath": "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion\\QuickerGitVersion.csproj",
   "expectedPackageFiles": [
     "F:\\_nuget\\libgit2sharp\\0.30.0\\libgit2sharp.0.30.0.nupkg.sha512",
     "F:\\_nuget\\libgit2sharp.nativebinaries\\2.0.322\\libgit2sharp.nativebinaries.2.0.322.nupkg.sha512",

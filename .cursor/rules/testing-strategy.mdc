@@ -1,5 +1,764 @@
 ---
-description:
-globs:
+description: 
+globs: 
 alwaysApply: false
 ---
+# GitVersion 测试策略规则
+
+## 测试项目结构
+
+### 测试项目配置
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.6.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <PackageReference Include="FluentAssertions" Version="6.12.0" />
+    <PackageReference Include="Moq" Version="4.20.69" />
+    <PackageReference Include="LibGit2Sharp" Version="0.30.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Testing" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\QuickerGitVersion\QuickerGitVersion.csproj" />
+  </ItemGroup>
+</Project>
+```
+
+## 单元测试实现
+
+### 1. VersionInfo 模型测试
+```csharp
+using FluentAssertions;
+using QuickerGitVersion.Models;
+using System.Text.Json;
+using Xunit;
+
+namespace QuickerGitVersion.Tests.Models
+{
+    public class VersionInfoTests
+    {
+        [Fact]
+        public void VersionInfo_Should_SerializeToJson_Correctly()
+        {
+            // Arrange
+            var versionInfo = new VersionInfo
+            {
+                Major = 1,
+                Minor = 100,
+                Patch = 1,
+                BranchName = "v2/try1",
+                EscapedBranchName = "v2-try1",
+                Sha = "7a1c4caa664beb914c154d1aede48b078989e635",
+                ShortSha = "7a1c4ca",
+                CommitDate = "2025-06-11",
+                CommitsSinceVersionSource = 9,
+                UncommittedChanges = 4
+            };
+
+            // Act
+            var json = JsonSerializer.Serialize(versionInfo, new JsonSerializerOptions 
+            { 
+                WriteIndented = true 
+            });
+
+            // Assert
+            json.Should().Contain("\"Major\": 1");
+            json.Should().Contain("\"BranchName\": \"v2/try1\"");
+            json.Should().Contain("\"EscapedBranchName\": \"v2-try1\"");
+        }
+
+        [Theory]
+        [InlineData("", "")]
+        [InlineData("main", "main")]
+        [InlineData("feature/new-feature", "feature-new-feature")]
+        [InlineData("hotfix\\urgent-fix", "hotfix-urgent-fix")]
+        public void EscapedBranchName_Should_HandleSpecialCharacters(string input, string expected)
+        {
+            // Arrange
+            var versionInfo = new VersionInfo { BranchName = input };
+            
+            // Act & Assert
+            // 这里需要在VersionService中实现分支名转义逻辑
+            var escaped = EscapeBranchName(input); // 辅助方法
+            escaped.Should().Be(expected);
+        }
+
+        private string EscapeBranchName(string branchName)
+        {
+            return branchName.Replace("/", "-").Replace("\\", "-");
+        }
+    }
+}
+```
+
+### 2. GitService 单元测试
+```csharp
+using FluentAssertions;
+using LibGit2Sharp;
+using QuickerGitVersion.Services;
+using System.IO;
+using Xunit;
+
+namespace QuickerGitVersion.Tests.Services
+{
+    public class GitServiceTests : IDisposable
+    {
+        private readonly string _tempRepoPath;
+        private readonly Repository _testRepo;
+
+        public GitServiceTests()
+        {
+            // 创建临时测试仓库
+            _tempRepoPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(_tempRepoPath);
+            
+            Repository.Init(_tempRepoPath);
+            _testRepo = new Repository(_tempRepoPath);
+            
+            // 配置测试仓库
+            SetupTestRepository();
+        }
+
+        private void SetupTestRepository()
+        {
+            // 设置用户信息
+            var signature = new Signature("Test User", "test@example.com", DateTimeOffset.Now);
+            
+            // 创建初始提交
+            var testFile = Path.Combine(_tempRepoPath, "test.txt");
+            File.WriteAllText(testFile, "Initial content");
+            
+            Commands.Stage(_testRepo, "test.txt");
+            _testRepo.Commit("Initial commit", signature, signature);
+            
+            // 创建版本标签
+            _testRepo.Tags.Add("v1.0.0", _testRepo.Head.Tip);
+            
+            // 添加更多提交
+            File.WriteAllText(testFile, "Modified content");
+            Commands.Stage(_testRepo, "test.txt");
+            _testRepo.Commit("Second commit", signature, signature);
+            
+            // 创建分支
+            var branch = _testRepo.CreateBranch("feature/test-branch");
+            Commands.Checkout(_testRepo, branch);
+            
+            // 在分支上添加提交
+            File.WriteAllText(testFile, "Branch content");
+            Commands.Stage(_testRepo, "test.txt");
+            _testRepo.Commit("Branch commit", signature, signature);
+        }
+
+        [Fact]
+        public void GetGitInfo_Should_ReturnCorrectBranchName()
+        {
+            // Arrange
+            var gitService = new GitService();
+
+            // Act
+            var gitInfo = gitService.GetGitInfo(_tempRepoPath);
+
+            // Assert
+            gitInfo.BranchName.Should().Be("feature/test-branch");
+        }
+
+        [Fact]
+        public void GetGitInfo_Should_ReturnCorrectCommitInfo()
+        {
+            // Arrange
+            var gitService = new GitService();
+
+            // Act
+            var gitInfo = gitService.GetGitInfo(_tempRepoPath);
+
+            // Assert
+            gitInfo.Sha.Should().NotBeNullOrEmpty();
+            gitInfo.ShortSha.Should().HaveLength(7);
+            gitInfo.CommitDate.Should().NotBeNullOrEmpty();
+        }
+
+        [Fact]
+        public void GetGitInfo_Should_CalculateCommitsSinceVersion()
+        {
+            // Arrange
+            var gitService = new GitService();
+
+            // Act
+            var gitInfo = gitService.GetGitInfo(_tempRepoPath);
+
+            // Assert
+            gitInfo.CommitsSinceVersionSource.Should().BeGreaterThan(0);
+        }
+
+        [Fact]
+        public void GetGitInfo_Should_ThrowException_WhenNotGitRepository()
+        {
+            // Arrange
+            var gitService = new GitService();
+            var nonGitPath = Path.GetTempPath();
+
+            // Act & Assert
+            gitService.Invoking(s => s.GetGitInfo(nonGitPath))
+                .Should().Throw<InvalidOperationException>()
+                .WithMessage("*Git仓库*");
+        }
+
+        public void Dispose()
+        {
+            _testRepo?.Dispose();
+            if (Directory.Exists(_tempRepoPath))
+            {
+                Directory.Delete(_tempRepoPath, true);
+            }
+        }
+    }
+}
+```
+
+### 3. VersionService 单元测试
+```csharp
+using FluentAssertions;
+using QuickerGitVersion.Models;
+using QuickerGitVersion.Services;
+using Xunit;
+
+namespace QuickerGitVersion.Tests.Services
+{
+    public class VersionServiceTests
+    {
+        [Fact]
+        public void CalculateVersion_Should_ReturnCorrectVersion_ForMainBranch()
+        {
+            // Arrange
+            var versionService = new VersionService();
+            var gitInfo = new GitInfo
+            {
+                BranchName = "main",
+                Sha = "abc123def456",
+                ShortSha = "abc123d",
+                CommitDate = "2025-06-11",
+                CommitsSinceVersionSource = 0,
+                UncommittedChanges = 0,
+                VersionSourceSha = "abc123def456"
+            };
+
+            // Act
+            var versionInfo = versionService.CalculateVersion(gitInfo);
+
+            // Assert
+            versionInfo.Major.Should().Be(1);
+            versionInfo.Minor.Should().Be(100);
+            versionInfo.Patch.Should().Be(1);
+            versionInfo.BranchName.Should().Be("main");
+            versionInfo.SemVer.Should().Be("1.100.1");
+            versionInfo.PreReleaseLabel.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void CalculateVersion_Should_ReturnPreReleaseVersion_ForFeatureBranch()
+        {
+            // Arrange
+            var versionService = new VersionService();
+            var gitInfo = new GitInfo
+            {
+                BranchName = "feature/new-feature",
+                Sha = "def456abc789",
+                ShortSha = "def456a",
+                CommitDate = "2025-06-11",
+                CommitsSinceVersionSource = 5,
+                UncommittedChanges = 2,
+                VersionSourceSha = "abc123def456"
+            };
+
+            // Act
+            var versionInfo = versionService.CalculateVersion(gitInfo);
+
+            // Assert
+            versionInfo.BranchName.Should().Be("feature/new-feature");
+            versionInfo.EscapedBranchName.Should().Be("feature-new-feature");
+            versionInfo.PreReleaseNumber.Should().Be(5);
+            versionInfo.SemVer.Should().Contain("{BranchName}");
+            versionInfo.PreReleaseLabel.Should().Be("{BranchName}");
+        }
+
+        [Theory]
+        [InlineData("main", true)]
+        [InlineData("master", true)]
+        [InlineData("Main", true)]  // 大小写不敏感
+        [InlineData("feature/test", false)]
+        [InlineData("develop", false)]
+        [InlineData("hotfix/urgent", false)]
+        public void IsMainBranch_Should_IdentifyMainBranches_Correctly(string branchName, bool expected)
+        {
+            // Arrange
+            var versionService = new VersionService();
+
+            // Act
+            var result = IsMainBranchHelper(branchName); // 需要暴露或创建辅助方法
+
+            // Assert
+            result.Should().Be(expected);
+        }
+
+        private bool IsMainBranchHelper(string branchName)
+        {
+            return branchName.Equals("main", StringComparison.OrdinalIgnoreCase) ||
+                   branchName.Equals("master", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+}
+```
+
+### 4. FileGeneratorService 单元测试
+```csharp
+using FluentAssertions;
+using QuickerGitVersion.Models;
+using QuickerGitVersion.Services;
+using System.IO;
+using System.Text.Json;
+using Xunit;
+
+namespace QuickerGitVersion.Tests.Services
+{
+    public class FileGeneratorServiceTests : IDisposable
+    {
+        private readonly string _tempOutputPath;
+
+        public FileGeneratorServiceTests()
+        {
+            _tempOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(_tempOutputPath);
+        }
+
+        [Fact]
+        public async Task GenerateJsonFileAsync_Should_CreateValidJsonFile()
+        {
+            // Arrange
+            var fileGenerator = new FileGeneratorService();
+            var versionInfo = CreateTestVersionInfo();
+
+            // Act
+            await fileGenerator.GenerateJsonFileAsync(versionInfo, _tempOutputPath);
+
+            // Assert
+            var jsonFilePath = Path.Combine(_tempOutputPath, "gitversion.json");
+            File.Exists(jsonFilePath).Should().BeTrue();
+
+            var jsonContent = await File.ReadAllTextAsync(jsonFilePath);
+            var deserializedInfo = JsonSerializer.Deserialize<VersionInfo>(jsonContent);
+            
+            deserializedInfo.Should().NotBeNull();
+            deserializedInfo!.Major.Should().Be(versionInfo.Major);
+            deserializedInfo.BranchName.Should().Be(versionInfo.BranchName);
+        }
+
+        [Fact]
+        public async Task GeneratePropsFileAsync_Should_CreateValidMSBuildFile()
+        {
+            // Arrange
+            var fileGenerator = new FileGeneratorService();
+            var versionInfo = CreateTestVersionInfo();
+
+            // Act
+            await fileGenerator.GeneratePropsFileAsync(versionInfo, _tempOutputPath);
+
+            // Assert
+            var propsFilePath = Path.Combine(_tempOutputPath, "gitversion.props");
+            File.Exists(propsFilePath).Should().BeTrue();
+
+            var propsContent = await File.ReadAllTextAsync(propsFilePath);
+            propsContent.Should().Contain("<Project>");
+            propsContent.Should().Contain("<PropertyGroup>");
+            propsContent.Should().Contain($"<GitVersion_Major>{versionInfo.Major}</GitVersion_Major>");
+            propsContent.Should().Contain($"<GitVersion_BranchName>{versionInfo.BranchName}</GitVersion_BranchName>");
+        }
+
+        [Fact]
+        public async Task GeneratePropertiesFileAsync_Should_CreateValidPropertiesFile()
+        {
+            // Arrange
+            var fileGenerator = new FileGeneratorService();
+            var versionInfo = CreateTestVersionInfo();
+
+            // Act
+            await fileGenerator.GeneratePropertiesFileAsync(versionInfo, _tempOutputPath);
+
+            // Assert
+            var propertiesFilePath = Path.Combine(_tempOutputPath, "gitversion.properties");
+            File.Exists(propertiesFilePath).Should().BeTrue();
+
+            var propertiesContent = await File.ReadAllTextAsync(propertiesFilePath);
+            propertiesContent.Should().Contain($"GitVersion.Major={versionInfo.Major}");
+            propertiesContent.Should().Contain($"GitVersion.BranchName={versionInfo.BranchName}");
+        }
+
+        [Fact]
+        public async Task GenerateJsonFileAsync_Should_ThrowException_WhenNoWritePermission()
+        {
+            // Arrange
+            var fileGenerator = new FileGeneratorService();
+            var versionInfo = CreateTestVersionInfo();
+            var invalidPath = Path.Combine("C:\\", "InvalidPath" + Guid.NewGuid());
+
+            // Act & Assert
+            await fileGenerator.Invoking(f => f.GenerateJsonFileAsync(versionInfo, invalidPath))
+                .Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        private VersionInfo CreateTestVersionInfo()
+        {
+            return new VersionInfo
+            {
+                Major = 1,
+                Minor = 100,
+                Patch = 1,
+                BranchName = "test-branch",
+                EscapedBranchName = "test-branch",
+                Sha = "abc123def456789",
+                ShortSha = "abc123d",
+                CommitDate = "2025-06-11",
+                CommitsSinceVersionSource = 5,
+                UncommittedChanges = 0,
+                MajorMinorPatch = "1.100.1",
+                AssemblySemVer = "1.100.1.0",
+                AssemblySemFileVer = "1.100.1.0",
+                SemVer = "1.100.1-test-branch.5",
+                FullSemVer = "1.100.1-test-branch.5"
+            };
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(_tempOutputPath))
+            {
+                Directory.Delete(_tempOutputPath, true);
+            }
+        }
+    }
+}
+```
+
+## 集成测试实现
+
+### 端到端测试
+```csharp
+using FluentAssertions;
+using LibGit2Sharp;
+using QuickerGitVersion.Services;
+using System.IO;
+using System.Text.Json;
+using Xunit;
+
+namespace QuickerGitVersion.Tests.Integration
+{
+    public class EndToEndTests : IDisposable
+    {
+        private readonly string _tempRepoPath;
+        private readonly string _tempOutputPath;
+
+        public EndToEndTests()
+        {
+            _tempRepoPath = Path.Combine(Path.GetTempPath(), "GitVersionTest_" + Guid.NewGuid());
+            _tempOutputPath = Path.Combine(Path.GetTempPath(), "Output_" + Guid.NewGuid());
+            
+            Directory.CreateDirectory(_tempRepoPath);
+            Directory.CreateDirectory(_tempOutputPath);
+            
+            SetupCompleteTestRepository();
+        }
+
+        private void SetupCompleteTestRepository()
+        {
+            Repository.Init(_tempRepoPath);
+            using var repo = new Repository(_tempRepoPath);
+            
+            var signature = new Signature("Test User", "test@example.com", DateTimeOffset.Now);
+            
+            // 创建初始文件和提交
+            var readmeFile = Path.Combine(_tempRepoPath, "README.md");
+            File.WriteAllText(readmeFile, "# Test Repository");
+            Commands.Stage(repo, "README.md");
+            repo.Commit("Initial commit", signature, signature);
+            
+            // 创建版本标签
+            repo.Tags.Add("v1.0.0", repo.Head.Tip);
+            
+            // 添加更多提交
+            for (int i = 1; i <= 5; i++)
+            {
+                File.WriteAllText(readmeFile, $"# Test Repository - Update {i}");
+                Commands.Stage(repo, "README.md");
+                repo.Commit($"Update {i}", signature, signature);
+            }
+            
+            // 创建功能分支
+            var featureBranch = repo.CreateBranch("feature/new-feature");
+            Commands.Checkout(repo, featureBranch);
+            
+            // 在功能分支上添加提交
+            var featureFile = Path.Combine(_tempRepoPath, "feature.txt");
+            File.WriteAllText(featureFile, "New feature content");
+            Commands.Stage(repo, "feature.txt");
+            repo.Commit("Add new feature", signature, signature);
+        }
+
+        [Fact]
+        public async Task FullWorkflow_Should_GenerateAllFiles_Correctly()
+        {
+            // Arrange
+            var gitService = new GitService();
+            var versionService = new VersionService();
+            var fileGeneratorService = new FileGeneratorService();
+
+            // Act
+            var gitInfo = gitService.GetGitInfo(_tempRepoPath);
+            var versionInfo = versionService.CalculateVersion(gitInfo);
+            
+            await fileGeneratorService.GenerateJsonFileAsync(versionInfo, _tempOutputPath);
+            await fileGeneratorService.GeneratePropsFileAsync(versionInfo, _tempOutputPath);
+            await fileGeneratorService.GeneratePropertiesFileAsync(versionInfo, _tempOutputPath);
+
+            // Assert
+            // 验证JSON文件
+            var jsonFilePath = Path.Combine(_tempOutputPath, "gitversion.json");
+            File.Exists(jsonFilePath).Should().BeTrue();
+            
+            var jsonContent = await File.ReadAllTextAsync(jsonFilePath);
+            var deserializedInfo = JsonSerializer.Deserialize<VersionInfo>(jsonContent);
+            deserializedInfo.Should().NotBeNull();
+            deserializedInfo!.BranchName.Should().Be("feature/new-feature");
+            
+            // 验证Props文件
+            var propsFilePath = Path.Combine(_tempOutputPath, "gitversion.props");
+            File.Exists(propsFilePath).Should().BeTrue();
+            var propsContent = await File.ReadAllTextAsync(propsFilePath);
+            propsContent.Should().Contain("<Project>");
+            
+            // 验证Properties文件
+            var propertiesFilePath = Path.Combine(_tempOutputPath, "gitversion.properties");
+            File.Exists(propertiesFilePath).Should().BeTrue();
+            var propertiesContent = await File.ReadAllTextAsync(propertiesFilePath);
+            propertiesContent.Should().Contain("GitVersion.BranchName=feature/new-feature");
+        }
+
+        [Fact]
+        public void GitInfo_Should_ReflectRepositoryState_Accurately()
+        {
+            // Arrange
+            var gitService = new GitService();
+
+            // Act
+            var gitInfo = gitService.GetGitInfo(_tempRepoPath);
+
+            // Assert
+            gitInfo.BranchName.Should().Be("feature/new-feature");
+            gitInfo.Sha.Should().NotBeNullOrEmpty().And.HaveLength(40);
+            gitInfo.ShortSha.Should().NotBeNullOrEmpty().And.HaveLength(7);
+            gitInfo.CommitsSinceVersionSource.Should().BeGreaterThan(0);
+            gitInfo.CommitDate.Should().NotBeNullOrEmpty();
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(_tempRepoPath))
+            {
+                Directory.Delete(_tempRepoPath, true);
+            }
+            if (Directory.Exists(_tempOutputPath))
+            {
+                Directory.Delete(_tempOutputPath, true);
+            }
+        }
+    }
+}
+```
+
+## 性能测试
+
+### 大型仓库性能测试
+```csharp
+using FluentAssertions;
+using LibGit2Sharp;
+using QuickerGitVersion.Services;
+using System.Diagnostics;
+using Xunit;
+
+namespace QuickerGitVersion.Tests.Performance
+{
+    public class PerformanceTests : IDisposable
+    {
+        private readonly string _tempRepoPath;
+
+        public PerformanceTests()
+        {
+            _tempRepoPath = Path.Combine(Path.GetTempPath(), "PerfTest_" + Guid.NewGuid());
+            SetupLargeRepository();
+        }
+
+        private void SetupLargeRepository()
+        {
+            Directory.CreateDirectory(_tempRepoPath);
+            Repository.Init(_tempRepoPath);
+            
+            using var repo = new Repository(_tempRepoPath);
+            var signature = new Signature("Test User", "test@example.com", DateTimeOffset.Now);
+            
+            // 创建大量提交（模拟大型项目）
+            var testFile = Path.Combine(_tempRepoPath, "test.txt");
+            
+            for (int i = 0; i < 1000; i++)
+            {
+                File.WriteAllText(testFile, $"Content {i}");
+                Commands.Stage(repo, "test.txt");
+                repo.Commit($"Commit {i}", signature, signature);
+                
+                // 每100个提交创建一个标签
+                if (i % 100 == 0 && i > 0)
+                {
+                    repo.Tags.Add($"v1.{i / 100}.0", repo.Head.Tip);
+                }
+            }
+        }
+
+        [Fact]
+        public void GetGitInfo_Should_CompleteWithinReasonableTime()
+        {
+            // Arrange
+            var gitService = new GitService();
+            var stopwatch = new Stopwatch();
+
+            // Act
+            stopwatch.Start();
+            var gitInfo = gitService.GetGitInfo(_tempRepoPath);
+            stopwatch.Stop();
+
+            // Assert
+            stopwatch.ElapsedMilliseconds.Should().BeLessThan(5000); // 5秒内完成
+            gitInfo.Should().NotBeNull();
+            gitInfo.CommitsSinceVersionSource.Should().BeGreaterThan(0);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(_tempRepoPath))
+            {
+                Directory.Delete(_tempRepoPath, true);
+            }
+        }
+    }
+}
+```
+
+## 测试数据管理
+
+### 测试辅助类
+```csharp
+namespace QuickerGitVersion.Tests.Helpers
+{
+    public static class TestRepositoryHelper
+    {
+        public static string CreateTestRepository(string? basePath = null)
+        {
+            var repoPath = basePath ?? Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(repoPath);
+            
+            Repository.Init(repoPath);
+            return repoPath;
+        }
+
+        public static void AddCommit(string repoPath, string message, string? fileName = null)
+        {
+            using var repo = new Repository(repoPath);
+            var signature = new Signature("Test User", "test@example.com", DateTimeOffset.Now);
+            
+            var file = fileName ?? "test.txt";
+            var filePath = Path.Combine(repoPath, file);
+            File.WriteAllText(filePath, $"Content for {message}");
+            
+            Commands.Stage(repo, file);
+            repo.Commit(message, signature, signature);
+        }
+
+        public static void CreateTag(string repoPath, string tagName)
+        {
+            using var repo = new Repository(repoPath);
+            repo.Tags.Add(tagName, repo.Head.Tip);
+        }
+
+        public static void CreateBranch(string repoPath, string branchName, bool checkout = true)
+        {
+            using var repo = new Repository(repoPath);
+            var branch = repo.CreateBranch(branchName);
+            
+            if (checkout)
+            {
+                Commands.Checkout(repo, branch);
+            }
+        }
+    }
+}
+```
+
+## CI/CD 测试配置
+
+### GitHub Actions 工作流
+```yaml
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        dotnet-version: ['8.0.x']
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0 # 获取完整历史记录用于版本计算
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ matrix.dotnet-version }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: Test
+      run: dotnet test --no-build --verbosity normal --collect:"XPlat Code Coverage"
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+```
+
+## 测试最佳实践
+
+1. **测试分层**：单元测试、集成测试、端到端测试
+2. **测试数据隔离**：每个测试使用独立的临时仓库
+3. **性能测试**：验证大型仓库的处理性能
+4. **边界条件**：测试空仓库、无标签、特殊分支名等情况
+5. **跨平台测试**：在不同操作系统上验证功能
+6. **自动化测试**：集成到CI/CD流程中
+7. **覆盖率监控**：确保代码覆盖率达到合理水平
+

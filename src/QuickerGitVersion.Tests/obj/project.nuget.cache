@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "pkbUe7vX8io=",
+  "dgSpecHash": "A0bE/HzOJwc=",
   "success": true,
-  "projectFilePath": "D:\\Work\\Tools\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\QuickerGitVersion.Tests.csproj",
+  "projectFilePath": "D:\\Work\\QuickerGitVersion\\src\\QuickerGitVersion.Tests\\QuickerGitVersion.Tests.csproj",
   "expectedPackageFiles": [
     "F:\\_nuget\\castle.core\\5.1.1\\castle.core.5.1.1.nupkg.sha512",
     "F:\\_nuget\\fluentassertions\\6.12.0\\fluentassertions.6.12.0.nupkg.sha512",

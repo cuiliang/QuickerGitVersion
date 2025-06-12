@@ -6,17 +6,21 @@ namespace QuickerGitVersion.Services;
 
 public class GitService
 {
+    public string? LastFoundRepositoryPath { get; private set; }
+    
     public GitInfo GetGitInfo(string repositoryPath)
     {
         try
         {
-            // 检查目录是否包含.git文件夹
-            if (!Repository.IsValid(repositoryPath))
+            // 查找Git仓库根目录
+            var gitRepoPath = FindGitRepositoryRoot(repositoryPath);
+            if (string.IsNullOrEmpty(gitRepoPath))
             {
-                throw new InvalidOperationException("当前目录不是有效的Git仓库");
+                throw new InvalidOperationException("当前目录或其父目录中未找到Git仓库");
             }
             
-            using var repo = new Repository(repositoryPath);
+            LastFoundRepositoryPath = gitRepoPath;
+            using var repo = new Repository(gitRepoPath);
             
             // 检查仓库是否为空
             if (repo.Head?.Tip == null)
@@ -78,6 +82,30 @@ public class GitService
         {
             throw new InvalidOperationException($"Git操作失败: {ex.Message}", ex);
         }
+    }
+    
+    private string FindGitRepositoryRoot(string startPath)
+    {
+        var currentPath = Path.GetFullPath(startPath);
+        
+        while (currentPath != null)
+        {
+            if (Repository.IsValid(currentPath))
+            {
+                return currentPath;
+            }
+            
+            // 检查是否到达根目录
+            var parentPath = Directory.GetParent(currentPath)?.FullName;
+            if (parentPath == currentPath)
+            {
+                break;
+            }
+            
+            currentPath = parentPath;
+        }
+        
+        return string.Empty;
     }
     
     private string GetBranchName(Repository repo)
