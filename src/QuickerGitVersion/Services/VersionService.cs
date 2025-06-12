@@ -13,10 +13,7 @@ public class VersionService
         // 1. 解析基础版本
         ParseBaseVersion(gitInfo, versionInfo);
         
-        // 2. 根据提交数增加版本
-        IncrementVersion(gitInfo, versionInfo);
-
-        // 3. 设置基础属性
+        // 2. 设置基础属性
         versionInfo.BranchName = gitInfo.BranchName;
         versionInfo.EscapedBranchName = EscapeBranchName(gitInfo.BranchName);
         versionInfo.Sha = gitInfo.Sha;
@@ -26,12 +23,12 @@ public class VersionService
         versionInfo.UncommittedChanges = gitInfo.UncommittedChanges;
         versionInfo.VersionSourceSha = gitInfo.VersionSourceSha;
         
-        // 4. 计算版本字符串
+        // 3. 计算版本字符串
         versionInfo.MajorMinorPatch = $"{versionInfo.Major}.{versionInfo.Minor}.{versionInfo.Patch}";
-        versionInfo.AssemblySemVer = $"{versionInfo.MajorMinorPatch}.0";
+        versionInfo.AssemblySemVer = $"{versionInfo.MajorMinorPatch}.{gitInfo.CommitsSinceVersionSource}";
         versionInfo.AssemblySemFileVer = versionInfo.AssemblySemVer;
         
-        // 5. 预发布版本处理
+        // 4. 预发布版本处理
         if (!IsMainBranch(gitInfo.BranchName) && gitInfo.CommitsSinceVersionSource > 0)
         {
             versionInfo.PreReleaseLabel = versionInfo.EscapedBranchName;
@@ -54,7 +51,7 @@ public class VersionService
             versionInfo.PreReleaseTagWithDash = string.Empty;
         }
         
-        // 6. 构建元数据
+        // 5. 构建元数据
         var buildMetadata = $"Branch.{versionInfo.EscapedBranchName}.Sha.{versionInfo.Sha}";
         if (gitInfo.UncommittedChanges > 0)
         {
@@ -95,18 +92,6 @@ public class VersionService
         versionInfo.Major = 0;
         versionInfo.Minor = 1;
         versionInfo.Patch = 0;
-    }
-
-    private void IncrementVersion(GitInfo gitInfo, VersionInfo versionInfo)
-    {
-        // Only increment if there are commits since the tag
-        if (gitInfo.CommitsSinceVersionSource > 0)
-        {
-            // For non-main branches, patch is typically incremented.
-            // For main branch, it depends on convention (minor or patch).
-            // Here, we'll increment patch for simplicity.
-            versionInfo.Patch += gitInfo.CommitsSinceVersionSource;
-        }
     }
 
     private string EscapeBranchName(string branchName)

@@ -2,7 +2,6 @@
 # QuickerGitVersion Build Script
 
 param(
-    [string]$Version = "1.0.0",
     [switch]$Pack,
     [switch]$Install,
     [switch]$Uninstall,
@@ -11,6 +10,20 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# 从 gitversion.props 读取版本信息
+Write-Host "📝 Reading version from gitversion.props..." -ForegroundColor Cyan
+$GitVersionPropsFile = "gitversion.props"
+if (-not (Test-Path $GitVersionPropsFile)) {
+    Write-Error "$GitVersionPropsFile not found. Please run QuickerGitVersion tool first to generate it."
+    exit 1
+}
+[xml]$gitversionProps = Get-Content $GitVersionPropsFile
+$Version = $gitversionProps.Project.PropertyGroup.GitVersion_FullSemVer
+if (-not $Version) {
+    Write-Error "Could not read version from $GitVersionPropsFile"
+    exit 1
+}
 
 # 项目路径
 $ProjectPath = "src/QuickerGitVersion"
