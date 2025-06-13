@@ -109,7 +109,7 @@ public class FileGeneratorService
                 {
                     // 转义Properties文件中的特殊字符
                     var escapedValue = value.ToString()?.Replace("\\", "\\\\").Replace("=", "\\=").Replace(":", "\\:");
-                    sb.AppendLine($"GitVersion.{prop.Name}={escapedValue}");
+                    sb.AppendLine($"GitVersion_{prop.Name}={escapedValue}");
                 }
             }
             
