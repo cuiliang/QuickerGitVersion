@@ -14,6 +14,7 @@ public class VersionServiceTests
         var versionService = new VersionService();
         var gitInfo = new GitInfo
         {
+            LatestTag = "v1.100.1",
             BranchName = "main",
             Sha = "abc123def456",
             ShortSha = "abc123d",
@@ -48,7 +49,8 @@ public class VersionServiceTests
             CommitDate = "2025-06-11",
             CommitsSinceVersionSource = 5,
             UncommittedChanges = 2,
-            VersionSourceSha = "abc123def456"
+            VersionSourceSha = "abc123def456",
+            LatestTag = "1.100.1"
         };
 
         // Act
@@ -63,10 +65,10 @@ public class VersionServiceTests
     }
 
     [Theory]
+    [InlineData("feature/test", false)]
     [InlineData("main", true)]
     [InlineData("master", true)]
     [InlineData("Main", true)]  // 大小写不敏感
-    [InlineData("feature/test", false)]
     [InlineData("develop", false)]
     [InlineData("hotfix/urgent", false)]
     public void IsMainBranch_Should_IdentifyMainBranches_Correctly(string branchName, bool expected)

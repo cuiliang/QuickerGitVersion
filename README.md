@@ -1,6 +1,14 @@
 # QuickerGitVersion
 
-一个简单的 GitVersion 命令行工具实现，使用 C# 编写。本工具可以从 Git 仓库信息中计算版本号，并生成多种格式的版本文件。
+GitVersion工具在生成版本号的时候，有的时候非常慢。
+这是一个简化版，用以生成3个文件，在自动编译流程中生成版本信息。
+使用方法：
+- 安装全局工具dotnet tool install -g QuickerGitVersion
+- 在根目录或子目录中运行QuickerGitVersion, 生成3个文件。
+- 在编译流程中使用这些文件：导入项目中、加载到Jenkins环境变量中等。
+
+本项目文档和代码主要由AI编写，如有问题欢迎反馈。
+
 
 ## 功能特性
 

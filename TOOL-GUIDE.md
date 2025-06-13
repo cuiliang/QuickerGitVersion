@@ -81,6 +81,8 @@ dotnet tool list -g
 # 使用脚本发布
 ./build-tool.ps1 -Pack -Push -NuGetApiKey "YOUR_API_KEY"
 
+./build-tool.ps1 -Pack -Push -NuGetApiKey $env:NUGET_APIKEY
+
 # 或手动发布
 dotnet nuget push output/QuickerGitVersion.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
 ```

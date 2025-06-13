@@ -1,6 +1,7 @@
 using QuickerGitVersion.Models;
 using System;
 using System.Text.RegularExpressions;
+using System.Linq;
 
 namespace QuickerGitVersion.Services;
 
@@ -29,7 +30,7 @@ public class VersionService
         versionInfo.AssemblySemFileVer = versionInfo.AssemblySemVer;
         
         // 4. 预发布版本处理
-        if (!IsMainBranch(gitInfo.BranchName) && gitInfo.CommitsSinceVersionSource > 0)
+        if (!IsMainBranch(gitInfo.BranchName))
         {
             versionInfo.PreReleaseLabel = versionInfo.EscapedBranchName;
             versionInfo.PreReleaseLabelWithDash = $"-{versionInfo.EscapedBranchName}";
@@ -77,12 +78,13 @@ public class VersionService
             }
             catch
             {
-                // Fallback if tag parsing fails
+                // 如果标签解析失败，使用默认版本号
                 SetDefaultVersion(versionInfo);
             }
         }
         else
         {
+            // 如果没有找到版本标签，使用默认版本号
             SetDefaultVersion(versionInfo);
         }
     }
@@ -90,7 +92,7 @@ public class VersionService
     private void SetDefaultVersion(VersionInfo versionInfo)
     {
         versionInfo.Major = 0;
-        versionInfo.Minor = 1;
+        versionInfo.Minor = 0;
         versionInfo.Patch = 0;
     }
 
@@ -106,7 +108,17 @@ public class VersionService
     
     private bool IsMainBranch(string branchName)
     {
-        return branchName.Equals("main", StringComparison.OrdinalIgnoreCase) ||
-               branchName.Equals("master", StringComparison.OrdinalIgnoreCase);
+        // 只认 main/master，忽略其它
+        var cleanBranchName = branchName;
+        if (branchName.StartsWith("remotes/"))
+        {
+            var parts = branchName.Split('/');
+            if (parts.Length >= 3)
+            {
+                cleanBranchName = string.Join("/", parts.Skip(2));
+            }
+        }
+        return string.Equals(cleanBranchName, "main", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(cleanBranchName, "master", StringComparison.OrdinalIgnoreCase);
     }
 } 
