@@ -122,49 +122,54 @@ public class GitService
     {
         if (repo.Head.IsCurrentRepositoryHead)
         {
-            // 正常分支
-            return repo.Head.FriendlyName;
+            var friendlyName = repo.Head.FriendlyName;
+            // 检查是否为分离头指针状态
+            if (friendlyName == "(no branch)")
+            {
+                try
+                {
+                    var startInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "git",
+                        Arguments = "name-rev --name-only HEAD",
+                        WorkingDirectory = repo.Info.WorkingDirectory,
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+
+                    using var process = System.Diagnostics.Process.Start(startInfo);
+                    if (process != null)
+                    {
+                        var output = process.StandardOutput.ReadToEnd().Trim();
+                        process.WaitForExit();
+
+                        if (!string.IsNullOrEmpty(output))
+                        {
+                            // 从输出中提取分支名，例如从 "remotes/origin/v2/try1" 提取 "v2/try1"
+                            var parts = output.Split('/');
+                            if (parts.Length >= 2)
+                            {
+                                // 跳过 "remotes" 和 "origin"，取剩余部分
+                                return string.Join("/", parts.Skip(2));
+                            }
+                            return output;
+                        }
+                    }
+                }
+                catch
+                {
+                    // 如果 git name-rev 命令失败，回退到使用 SHA
+                }
+
+                // 如果上述方法都失败，使用提交SHA作为标识
+                return $"HEAD-{repo.Head.Tip.Sha.Substring(0, 8)}";
+            }
+            return friendlyName;
         }
         else
         {
-            // 分离HEAD状态，尝试使用 git name-rev 命令获取分支名
-            try
-            {
-                var startInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "git",
-                    Arguments = "name-rev --name-only HEAD",
-                    WorkingDirectory = repo.Info.WorkingDirectory,
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-
-                using var process = System.Diagnostics.Process.Start(startInfo);
-                if (process != null)
-                {
-                    var output = process.StandardOutput.ReadToEnd().Trim();
-                    process.WaitForExit();
-
-                    if (!string.IsNullOrEmpty(output))
-                    {
-                        // 从输出中提取分支名，例如从 "remotes/origin/v2/try1" 提取 "v2/try1"
-                        var parts = output.Split('/');
-                        if (parts.Length >= 2)
-                        {
-                            // 跳过 "remotes" 和 "origin"，取剩余部分
-                            return string.Join("/", parts.Skip(2));
-                        }
-                        return output;
-                    }
-                }
-            }
-            catch
-            {
-                // 如果 git name-rev 命令失败，回退到使用 SHA
-            }
-
-            // 如果上述方法都失败，使用提交SHA作为标识
+            // 非当前仓库头指针状态，使用提交SHA作为标识
             return $"HEAD-{repo.Head.Tip.Sha.Substring(0, 8)}";
         }
     }
